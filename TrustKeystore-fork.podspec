@@ -1,6 +1,6 @@
 Pod::Spec.new do |s|
   s.name         = 'TrustKeystore-fork'
-  s.version      = '0.2.2'
+  s.version      = '0.2.4'
   s.summary      = 'A general-purpose Ethereum keystore for managing wallets.'
   s.homepage     = 'https://github.com/yaozongchao/trust-keystore'
   s.license      = 'GPL'
