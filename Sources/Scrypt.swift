@@ -42,7 +42,7 @@ public final class Scrypt {
     }
 
     /// Computes scrypt.
-    private func scrypt(password: [UInt8], salt: [UInt8]) throws -> [UInt8] {
+    public func scrypt(password: [UInt8], salt: [UInt8]) throws -> [UInt8] {
         // Allocate memory.
         let B = UnsafeMutableRawPointer.allocate(bytes: 128 * params.r * params.p, alignedTo: 64)
         let XY = UnsafeMutableRawPointer.allocate(bytes: 256 * params.r + 64, alignedTo: 64)
