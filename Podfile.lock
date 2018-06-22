@@ -12,6 +12,13 @@ DEPENDENCIES:
   - secp256k1_ios (from `https://github.com/shamatar/secp256k1_ios.git`)
   - TrezorCrypto
 
+SPEC REPOS:
+  https://github.com/cocoapods/specs.git:
+    - BigInt
+    - CryptoSwift
+    - SipHash
+    - TrezorCrypto
+
 EXTERNAL SOURCES:
   secp256k1_ios:
     :git: https://github.com/shamatar/secp256k1_ios.git
@@ -30,4 +37,4 @@ SPEC CHECKSUMS:
 
 PODFILE CHECKSUM: 247d561b18855d084a04990e209fa8c61326ce2d
 
-COCOAPODS: 1.4.0
+COCOAPODS: 1.5.3
