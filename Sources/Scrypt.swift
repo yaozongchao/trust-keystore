@@ -29,9 +29,14 @@ public final class Scrypt {
 
     /// Runs the key derivation function with a specific password.
     public func calculate(password: String) throws -> Data {
-        guard let passwordData = password.data(using: .utf8) else {
+        // 兼容android，使用hexData
+        guard let passwordData = Data(hexString: password) else {
             throw Error.invalidPassword
         }
+//
+//        guard let passwordData = password.data(using: .utf8) else {
+//            throw Error.invalidPassword
+//        }
 
         if let error = params.validate() {
             throw error
