@@ -26,17 +26,28 @@ public final class Scrypt {
     public init(params: ScryptParams) {
         self.params = params
     }
-
-    /// Runs the key derivation function with a specific password.
-    public func calculate(password: String) throws -> Data {
+    
+    public func calculateHex(password: String) throws -> Data {
         // 兼容android，使用hexData
         guard let passwordData = Data(hexString: password) else {
             throw Error.invalidPassword
         }
-//
-//        guard let passwordData = password.data(using: .utf8) else {
-//            throw Error.invalidPassword
-//        }
+        
+        if let error = params.validate() {
+            throw error
+        }
+        
+        let result = try scrypt(password: passwordData.bytes, salt: params.salt.bytes)
+        return Data(bytes: result)
+    }
+
+
+    /// Runs the key derivation function with a specific password.
+    public func calculate(password: String) throws -> Data {
+
+        guard let passwordData = password.data(using: .utf8) else {
+            throw Error.invalidPassword
+        }
 
         if let error = params.validate() {
             throw error

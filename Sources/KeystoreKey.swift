@@ -57,23 +57,46 @@ public struct KeystoreKey {
 
     /// Initializes a `Key` by encrypting a private key with a password.
     public init(password: String, key: Data) throws {
+        try self.init(password: password, key: key, hex: false)
+//        id = UUID().uuidString.lowercased()
+//
+//        let cipherParams = CipherParams()
+//        let kdfParams = ScryptParams()
+//
+//        let scrypt = Scrypt(params: kdfParams)
+//        let derivedKey = try scrypt.calculate(password: password)
+//
+//        let encryptionKey = derivedKey[0...15]
+//        let aecCipher = try AES(key: encryptionKey.bytes, blockMode: .CTR(iv: cipherParams.iv.bytes), padding: .noPadding)
+//
+//        let encryptedKey = try aecCipher.encrypt(key.bytes)
+//        let prefix = derivedKey[(derivedKey.count - 16) ..< derivedKey.count]
+//        let mac = KeystoreKey.computeMAC(prefix: prefix, key: Data(bytes: encryptedKey))
+//
+//        crypto = KeystoreKeyHeader(cipherText: Data(bytes: encryptedKey), cipherParams: cipherParams, kdfParams: kdfParams, mac: mac)
+//
+//        let pubKey = Secp256k1.shared.pubicKey(from: key)
+//        address = KeystoreKey.decodeAddress(from: pubKey)
+    }
+    
+    public init(password: String, key: Data, hex: Bool) throws {
         id = UUID().uuidString.lowercased()
-
+        
         let cipherParams = CipherParams()
         let kdfParams = ScryptParams()
-
+        
         let scrypt = Scrypt(params: kdfParams)
-        let derivedKey = try scrypt.calculate(password: password)
-
+        let derivedKey = try hex ? scrypt.calculateHex(password: password) : scrypt.calculate(password: password)
+        
         let encryptionKey = derivedKey[0...15]
         let aecCipher = try AES(key: encryptionKey.bytes, blockMode: .CTR(iv: cipherParams.iv.bytes), padding: .noPadding)
-
+        
         let encryptedKey = try aecCipher.encrypt(key.bytes)
         let prefix = derivedKey[(derivedKey.count - 16) ..< derivedKey.count]
         let mac = KeystoreKey.computeMAC(prefix: prefix, key: Data(bytes: encryptedKey))
-
+        
         crypto = KeystoreKeyHeader(cipherText: Data(bytes: encryptedKey), cipherParams: cipherParams, kdfParams: kdfParams, mac: mac)
-
+        
         let pubKey = Secp256k1.shared.pubicKey(from: key)
         address = KeystoreKey.decodeAddress(from: pubKey)
     }
@@ -115,6 +138,37 @@ public struct KeystoreKey {
             throw DecryptError.unsupportedCipher
         }
 
+        return Data(bytes: decryptedPK)
+    }
+    
+    public func decryptHex(password: String) throws -> Data {
+        let derivedKey: Data
+        switch crypto.kdf {
+        case "scrypt":
+            let scrypt = Scrypt(params: crypto.kdfParams)
+            derivedKey = try scrypt.calculateHex(password: password)
+        default:
+            throw DecryptError.unsupportedKDF
+        }
+        
+        let mac = KeystoreKey.computeMAC(prefix: derivedKey[derivedKey.count - 16 ..< derivedKey.count], key: crypto.cipherText)
+        if mac != crypto.mac {
+            throw DecryptError.invalidPassword
+        }
+        
+        let decryptionKey = derivedKey[0...15]
+        let decryptedPK: [UInt8]
+        switch crypto.cipher {
+        case "aes-128-ctr":
+            let aesCipher = try AES(key: decryptionKey.bytes, blockMode: .CTR(iv: crypto.cipherParams.iv.bytes), padding: .noPadding)
+            decryptedPK = try aesCipher.decrypt(crypto.cipherText.bytes)
+        case "aes-128-cbc":
+            let aesCipher = try AES(key: decryptionKey.bytes, blockMode: .CBC(iv: crypto.cipherParams.iv.bytes), padding: .noPadding)
+            decryptedPK = try aesCipher.decrypt(crypto.cipherText.bytes)
+        default:
+            throw DecryptError.unsupportedCipher
+        }
+        
         return Data(bytes: decryptedPK)
     }
 
