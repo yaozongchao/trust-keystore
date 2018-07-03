@@ -13,77 +13,83 @@ import Security
 public struct KeystoreKey {
     /// Ethereum address.
     public var address: Address
-
+    
     /// Wallet UUID, optional.
     public var id: String?
-
+    
     /// Key header with encrypted private key and crypto parameters.
     public var crypto: KeystoreKeyHeader
-
+    
     /// Key version, must be 3.
     public var version = 3
-
+    
     /// Creates a new `Key` with a password.
     @available(iOS 10.0, *)
     public init(password: String) throws {
         let privateAttributes: [String: Any] = [
             kSecAttrIsExtractable as String: true,
-        ]
+            ]
         let parameters: [String: Any] = [
             kSecAttrKeyType as String: kSecAttrKeyTypeEC,
             kSecAttrKeySizeInBits as String: 256,
             kSecPrivateKeyAttrs as String: privateAttributes,
-        ]
-
+            ]
+        
         var pubKey: SecKey?
         var privKey: SecKey?
         let status = SecKeyGeneratePair(parameters as CFDictionary, &pubKey, &privKey)
         guard let privateKey = privKey, status == noErr else {
             fatalError("Failed to generate key pair")
         }
-
+        
         guard let keyRepresentation = SecKeyCopyExternalRepresentation(privateKey, nil) as Data? else {
             fatalError("Failed to extract new private key")
         }
         let key = keyRepresentation[(keyRepresentation.count - 32)...]
         try self.init(password: password, key: key)
     }
-
+    
     /// Initializes a `Key` from a JSON wallet.
     public init(contentsOf url: URL) throws {
         let data = try Data(contentsOf: url)
         self = try JSONDecoder().decode(KeystoreKey.self, from: data)
     }
-
+    
     /// Initializes a `Key` by encrypting a private key with a password.
     public init(password: String, key: Data) throws {
         try self.init(password: password, key: key, hex: false)
-//        id = UUID().uuidString.lowercased()
-//
-//        let cipherParams = CipherParams()
-//        let kdfParams = ScryptParams()
-//
-//        let scrypt = Scrypt(params: kdfParams)
-//        let derivedKey = try scrypt.calculate(password: password)
-//
-//        let encryptionKey = derivedKey[0...15]
-//        let aecCipher = try AES(key: encryptionKey.bytes, blockMode: .CTR(iv: cipherParams.iv.bytes), padding: .noPadding)
-//
-//        let encryptedKey = try aecCipher.encrypt(key.bytes)
-//        let prefix = derivedKey[(derivedKey.count - 16) ..< derivedKey.count]
-//        let mac = KeystoreKey.computeMAC(prefix: prefix, key: Data(bytes: encryptedKey))
-//
-//        crypto = KeystoreKeyHeader(cipherText: Data(bytes: encryptedKey), cipherParams: cipherParams, kdfParams: kdfParams, mac: mac)
-//
-//        let pubKey = Secp256k1.shared.pubicKey(from: key)
-//        address = KeystoreKey.decodeAddress(from: pubKey)
+        //        id = UUID().uuidString.lowercased()
+        //
+        //        let cipherParams = CipherParams()
+        //        let kdfParams = ScryptParams()
+        //
+        //        let scrypt = Scrypt(params: kdfParams)
+        //        let derivedKey = try scrypt.calculate(password: password)
+        //
+        //        let encryptionKey = derivedKey[0...15]
+        //        let aecCipher = try AES(key: encryptionKey.bytes, blockMode: .CTR(iv: cipherParams.iv.bytes), padding: .noPadding)
+        //
+        //        let encryptedKey = try aecCipher.encrypt(key.bytes)
+        //        let prefix = derivedKey[(derivedKey.count - 16) ..< derivedKey.count]
+        //        let mac = KeystoreKey.computeMAC(prefix: prefix, key: Data(bytes: encryptedKey))
+        //
+        //        crypto = KeystoreKeyHeader(cipherText: Data(bytes: encryptedKey), cipherParams: cipherParams, kdfParams: kdfParams, mac: mac)
+        //
+        //        let pubKey = Secp256k1.shared.pubicKey(from: key)
+        //        address = KeystoreKey.decodeAddress(from: pubKey)
     }
     
     public init(password: String, key: Data, hex: Bool) throws {
         id = UUID().uuidString.lowercased()
         
         let cipherParams = CipherParams()
-        let kdfParams = ScryptParams()
+        var kdfParams = ScryptParams()
+        if hex {
+            kdfParams.n = 16384
+            kdfParams.p = 1
+            kdfParams.r = 8
+            kdfParams.desiredKeyLength = 32
+        }
         
         let scrypt = Scrypt(params: kdfParams)
         let derivedKey = try hex ? scrypt.calculateHex(password: password) : scrypt.calculate(password: password)
@@ -93,14 +99,16 @@ public struct KeystoreKey {
         
         let encryptedKey = try aecCipher.encrypt(key.bytes)
         let prefix = derivedKey[(derivedKey.count - 16) ..< derivedKey.count]
-        let mac = KeystoreKey.computeMAC(prefix: prefix, key: Data(bytes: encryptedKey))
+        let mac = hex ? KeystoreKey.computeMACHex(prefix: prefix, key: Data(bytes: encryptedKey)) : KeystoreKey.computeMAC(prefix: prefix, key: Data(bytes: encryptedKey))
+        print("+++++++++++++derivedKey: (\(derivedKey.hexString)), hex: (\(hex))")
+        print("-------------mac: (\(mac.hexString)), hex: (\(hex))")
         
         crypto = KeystoreKeyHeader(cipherText: Data(bytes: encryptedKey), cipherParams: cipherParams, kdfParams: kdfParams, mac: mac)
         
         let pubKey = Secp256k1.shared.pubicKey(from: key)
         address = KeystoreKey.decodeAddress(from: pubKey)
     }
-
+    
     /// Decodes an Ethereum address from a public key.
     static func decodeAddress(from publicKey: Data) -> Address {
         precondition(publicKey.count == 65, "Expect 64-byte public key")
@@ -108,7 +116,7 @@ public struct KeystoreKey {
         let sha3 = publicKey[1...].sha3(.keccak256)
         return Address(data: sha3[12..<32])
     }
-
+    
     /// Decrypts the key and returns the private key.
     public func decrypt(password: String) throws -> Data {
         let derivedKey: Data
@@ -119,12 +127,12 @@ public struct KeystoreKey {
         default:
             throw DecryptError.unsupportedKDF
         }
-
+        
         let mac = KeystoreKey.computeMAC(prefix: derivedKey[derivedKey.count - 16 ..< derivedKey.count], key: crypto.cipherText)
         if mac != crypto.mac {
             throw DecryptError.invalidPassword
         }
-
+        
         let decryptionKey = derivedKey[0...15]
         let decryptedPK: [UInt8]
         switch crypto.cipher {
@@ -137,7 +145,7 @@ public struct KeystoreKey {
         default:
             throw DecryptError.unsupportedCipher
         }
-
+        
         return Data(bytes: decryptedPK)
     }
     
@@ -171,14 +179,22 @@ public struct KeystoreKey {
         
         return Data(bytes: decryptedPK)
     }
-
+    
     private static func computeMAC(prefix: Data, key: Data) -> Data {
         var data = Data(capacity: prefix.count + key.count)
         data.append(prefix)
         data.append(key)
         return data.sha3(.keccak256)
     }
-
+    
+    private static func computeMACHex(prefix: Data, key: Data) -> Data {
+        var data = Data(capacity: prefix.count + key.count)
+        data.append(prefix)
+        data.append(key)
+        return data.sha3(.sha256)
+    }
+    
+    
     /// Signs a hash with the given password.
     ///
     /// - Parameters:
@@ -206,11 +222,11 @@ extension KeystoreKey: Codable {
         case crypto
         case version
     }
-
+    
     enum UppercaseCodingKeys: String, CodingKey {
         case crypto = "Crypto"
     }
-
+    
     public init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
         let altValues = try decoder.container(keyedBy: UppercaseCodingKeys.self)
@@ -224,7 +240,7 @@ extension KeystoreKey: Codable {
         }
         version = try values.decode(Int.self, forKey: .version)
     }
-
+    
     public func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(address.description.drop0x(), forKey: .address)
