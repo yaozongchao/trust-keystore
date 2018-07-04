@@ -100,8 +100,8 @@ public struct KeystoreKey {
         let encryptedKey = try aecCipher.encrypt(key.bytes)
         let prefix = derivedKey[(derivedKey.count - 16) ..< derivedKey.count]
         let mac = hex ? KeystoreKey.computeMACHex(prefix: prefix, key: Data(bytes: encryptedKey)) : KeystoreKey.computeMAC(prefix: prefix, key: Data(bytes: encryptedKey))
-        print("+++++++++++++derivedKey: (\(derivedKey.hexString)), hex: (\(hex))")
-        print("-------------mac: (\(mac.hexString)), hex: (\(hex))")
+//        print("+++++++++++++derivedKey: (\(derivedKey.hexString)), hex: (\(hex))")
+//        print("-------------mac: (\(mac.hexString)), hex: (\(hex))")
         
         crypto = KeystoreKeyHeader(cipherText: Data(bytes: encryptedKey), cipherParams: cipherParams, kdfParams: kdfParams, mac: mac)
         
