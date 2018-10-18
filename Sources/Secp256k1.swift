@@ -34,7 +34,7 @@ public final class Secp256k1 {
             var len = pubKeyData.count
             secp256k1_ec_pubkey_serialize(context, output, &len, &pubKey, UInt32(SECP256K1_EC_UNCOMPRESSED))
         }
-        return pubKeyData
+        return data
     }
 
     /// Signs a hash with a private key.
